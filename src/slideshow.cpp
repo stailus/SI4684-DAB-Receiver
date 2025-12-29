@@ -82,25 +82,26 @@ void ShowSlideShow(void) {
       return;
     }
     int16_t rc = png.open("/slideshow.img",
-    +[](const char *filename, int32_t *size) -> void * {
-      *size = pngfile.size();
-      return &pngfile;
-    },
-    +[](void *handle) {
-    },
-    +[](PNGFILE * page, uint8_t *buffer, int32_t length) -> int32_t {
-      if (!pngfile || !pngfile.available()) return 0;
-      return pngfile.read(buffer, length);
-    },
-    +[](PNGFILE * page, int32_t position) -> int32_t {
-      if (!pngfile || !pngfile.available()) return 0;
-      return pngfile.seek(position);
-    },
-    +[](PNGDRAW * pDraw) {
-      uint16_t lineBuffer[320];
-      png.getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
-      tft.pushImage((320 - png.getWidth()) / 2, ((240 - png.getHeight()) / 2) + pDraw->y, pDraw->iWidth, 1, lineBuffer);
-    });
+      +[](const char *filename, int32_t *size) -> void * {
+        *size = pngfile.size();
+        return &pngfile;
+      },
+      +[](void *handle) {
+      },
+      +[](PNGFILE *page, uint8_t *buffer, int32_t length) -> int32_t {
+        if (!pngfile || !pngfile.available()) return 0;
+        return pngfile.read(buffer, length);
+      },
+      +[](PNGFILE *page, int32_t position) -> int32_t {
+        if (!pngfile || !pngfile.available()) return 0;
+        return pngfile.seek(position);
+      },
+      +[](PNGDRAW *pDraw) {
+        uint16_t lineBuffer[320];
+        png.getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
+        tft.pushImage((320 - png.getWidth()) / 2, ((240 - png.getHeight()) / 2) + pDraw->y, pDraw->iWidth, 1, lineBuffer);
+        return 1;  // return int not void
+      });
 
     if (rc != PNG_SUCCESS) {
       closeFiles();
