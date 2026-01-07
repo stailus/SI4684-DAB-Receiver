@@ -1,0 +1,5 @@
+# Name      ,Type ,SubType ,Offset   ,Size
+nvs         ,data ,nvs     ,0x9000   ,0x5000
+app         ,app  ,factory ,0x10000  ,0x360000
+spiffs      ,data ,spiffs  ,0x370000 ,0x4B000
+coredump    ,data ,coredump,0x3FB000 ,0x5000
