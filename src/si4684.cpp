@@ -12,14 +12,14 @@ bool EnsembleInfoSet;
 uint8_t slaveSelectPin;
 bool processEPG;
 
-static void SPIwrite(unsigned char *data, uint32_t length);
+static void SPIwrite(unsigned char* data, uint32_t length);
 static void SPIread(uint16_t length);
 static void cts(void);
 static void Set_Property(uint16_t property, uint16_t value);
 static String convertToUTF8(const wchar_t* input);
-static String extractUTF8Substring(const String & utf8String, size_t start, size_t length);
-static void RDScharConverter(const char* input, wchar_t* output, size_t size);
-static int compareCompID(const void *a, const void *b);
+static String extractUTF8Substring(const String& utf8String, size_t start, size_t length);
+static void charConverter(const char* input, wchar_t* output, size_t size);
+static int compareCompID(const void* a, const void* b);
 
 char* DAB::getChipID(void) {
   SPIbuffer[0] = 0x08;
@@ -59,7 +59,8 @@ bool DAB::panic(void) {
   SPIwrite(SPIbuffer, 2);
   cts();
   SPIread(6);
-  if (SPIbuffer[5] == 0x09) return true; else return false;
+  if (SPIbuffer[5] == 0x09) return true;
+  else return false;
 }
 
 uint16_t DAB::getRSSI(void) {
@@ -86,11 +87,11 @@ void DAB::vol(uint8_t vol) {
   Set_Property(0x0300, (vol & 0x3F));
 }
 
-static void SPIwrite(unsigned char *data, uint32_t length) {
+static void SPIwrite(unsigned char* data, uint32_t length) {
   SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
-  digitalWrite (slaveSelectPin, LOW);
+  digitalWrite(slaveSelectPin, LOW);
   SPI.transfer(data, length);
-  digitalWrite (slaveSelectPin, HIGH);
+  digitalWrite(slaveSelectPin, HIGH);
   SPI.endTransaction();
 }
 
@@ -134,7 +135,7 @@ bool DAB::begin(uint8_t SSpin) {
   memset(SPIbuffer, 0, sizeof(SPIbuffer));
   if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
   slaveSelectPin = SSpin;
-  pinMode(slaveSelectPin, OUTPUT);                                        // Configure SPI
+  pinMode(slaveSelectPin, OUTPUT);  // Configure SPI
   digitalWrite(slaveSelectPin, HIGH);
   SPI.begin(14, 16, 13, SSpin);
   delay(3);
@@ -152,7 +153,7 @@ bool DAB::begin(uint8_t SSpin) {
   }
 
   if (SPIbuffer[1] != 2) {
-    SPIbuffer[0] = 0x01;                                                    // POWER_UP
+    SPIbuffer[0] = 0x01;  // POWER_UP
     SPIbuffer[1] = 0x00;
     SPIbuffer[2] = 0x17;
     SPIbuffer[3] = 0x48;
@@ -173,12 +174,12 @@ bool DAB::begin(uint8_t SSpin) {
 
     delayMicroseconds(20);
 
-    SPIbuffer[0] = 0x06;                                                    // LOAD_INIT
+    SPIbuffer[0] = 0x06;  // LOAD_INIT
     SPIbuffer[1] = 0x00;
     SPIwrite(SPIbuffer, 2);
     cts();
 
-    uint32_t index = 0;                                                     // Write bootloader
+    uint32_t index = 0;  // Write bootloader
     for (uint16_t i = 0; index < sizeof(rom_patch_016); i++) {
       SPIbuffer[0] = 0x04;
       SPIbuffer[1] = 0x00;
@@ -190,7 +191,7 @@ bool DAB::begin(uint8_t SSpin) {
     }
 
     delay(4);
-    SPIbuffer[0] = 0x06;                                                    // LOAD_INIT
+    SPIbuffer[0] = 0x06;  // LOAD_INIT
     SPIbuffer[1] = 0x00;
     SPIwrite(SPIbuffer, 2);
     cts();
@@ -210,12 +211,12 @@ bool DAB::begin(uint8_t SSpin) {
       cts();
     }
 
-    SPIbuffer[0] = 0x07;                                                    // BOOT
+    SPIbuffer[0] = 0x07;  // BOOT
     SPIbuffer[1] = 0x00;
     SPIwrite(SPIbuffer, 2);
     cts();
 
-    SPIbuffer[0] = 0xB8;                                                    // Write DAB frequencyplan
+    SPIbuffer[0] = 0xB8;  // Write DAB frequencyplan
     SPIbuffer[1] = 0x26;
     SPIbuffer[2] = 0x00;
     SPIbuffer[3] = 0x00;
@@ -228,7 +229,7 @@ bool DAB::begin(uint8_t SSpin) {
     SPIwrite(SPIbuffer, 4 + (38 * 4));
     cts();
 
-    Set_Property(0x0200, 0x8000);                                            // Set properties
+    Set_Property(0x0200, 0x8000);  // Set properties
     Set_Property(0x0202, 0x1600);
     Set_Property(0x0800, 0x0003);
     Set_Property(0x1710, 0xF7A0);
@@ -249,16 +250,17 @@ bool DAB::begin(uint8_t SSpin) {
 }
 
 void DAB::EnsembleInfo(void) {
-  SPIbuffer[0] = 0xB2;                                                      // Get signalstatus
+  SPIbuffer[0] = 0xB2;  // Get signalstatus
   SPIbuffer[1] = 0x09;
   SPIwrite(SPIbuffer, 2);
   cts();
   SPIread(19);
   fic = SPIbuffer[9];
   cnr = SPIbuffer[10];
-  if (fic > 0) signallock = true; else signallock = false;
+  if (fic > 0) signallock = true;
+  else signallock = false;
   if (signallock) {
-    SPIbuffer[0] = 0x80;                                                    // Get servicelist
+    SPIbuffer[0] = 0x80;  // Get servicelist
     SPIbuffer[1] = 0x00;
     SPIwrite(SPIbuffer, 2);
     cts();
@@ -270,14 +272,14 @@ void DAB::EnsembleInfo(void) {
 
       numberofservices = SPIbuffer[9];
       if (numberofservices > sizeof(service) / sizeof(DABService)) {
-        clearData();                                                        // Handle overflow when signal is crappy
+        clearData();  // Handle overflow when signal is crappy
       }
 
       uint16_t offset = 13;
 
       for (uint8_t i = 0; i < numberofservices; i++) {
         if (i >= sizeof(service) / sizeof(DABService)) {
-          clearData();                                                      // Handle overflow when signal is crappy
+          clearData();  // Handle overflow when signal is crappy
         }
 
         serviceID = SPIbuffer[offset + 3];
@@ -458,7 +460,7 @@ void DAB::getServiceData(void) {
           }
 
 
-          SlideShowLength = (((uint16_t)SPIbuffer[35] << 12) | ((uint16_t)SPIbuffer[36] << 4) | ((uint16_t)SPIbuffer[37]  >> 4)) & 0x00FFFF;
+          SlideShowLength = (((uint16_t)SPIbuffer[35] << 12) | ((uint16_t)SPIbuffer[36] << 4) | ((uint16_t)SPIbuffer[37] >> 4)) & 0x00FFFF;
 
           if (SlideShowLength > 0 && SlideShowLength != SlideShowLengthOld) {
             SlideShowNew = true;
@@ -489,7 +491,8 @@ void DAB::getServiceData(void) {
             slideshowFile.close();
           }
         } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x00) {
-          if (SPIbuffer[28] == 0x00 && SPIbuffer[34] == 0x02) processEPG = true; else if (SPIbuffer[28] == 0x00 && SPIbuffer[34] != 0x02) processEPG = false;
+          if (SPIbuffer[28] == 0x00 && SPIbuffer[34] == 0x02) processEPG = true;
+          else if (SPIbuffer[28] == 0x00 && SPIbuffer[34] != 0x02) processEPG = false;
 
           if (EPGbufferByteCounter != 0 && SPIbuffer[31] != EPGbufferIDOld && EPGbuffer[0] == 0x02) parseEPG();
 
@@ -762,190 +765,123 @@ void DAB::Update(void) {
 }
 
 String DAB::ASCII(const char* input, uint8_t charset) {
-  wchar_t temp[256] = L"";
-  String temp2;
-  if (charset == 0) {
-    RDScharConverter(input, temp, sizeof(temp) / sizeof(wchar_t));
-    temp2 = convertToUTF8(temp);
-    temp2 = extractUTF8Substring(temp2, 0, temp2.length());
-  } else {
-    temp2 = input;
+  if (!input) return String();
+  String result;
+  if (charset != 0) return String(input);
+
+  bool looksLikeUTF8 = false;
+  for (size_t i = 0; input[i] != '\0'; i++) {
+    uint8_t c = (uint8_t)input[i];
+
+    if ((c & 0xE0) == 0xC0) {
+      uint8_t c2 = (uint8_t)input[i + 1];
+      if ((c2 & 0xC0) == 0x80) {
+        looksLikeUTF8 = true;
+        break;
+      }
+    } else if ((c & 0xF0) == 0xE0) {
+      uint8_t c2 = (uint8_t)input[i + 1];
+      uint8_t c3 = (uint8_t)input[i + 2];
+      if ((c2 & 0xC0) == 0x80 && (c3 & 0xC0) == 0x80) {
+        looksLikeUTF8 = true;
+        break;
+      }
+    }
   }
-  return temp2;
+
+  if (looksLikeUTF8) {
+    return String(input);
+  }
+
+  wchar_t temp[128];
+  charConverter(input, temp, sizeof(temp) / sizeof(wchar_t));
+  result = convertToUTF8(temp);
+
+  return result;
 }
 
 
-static int compareCompID(const void *a, const void *b) {
-  uint32_t compID_a = (*((DABService *)a)).CompID & 0xFF;
-  uint32_t compID_b = (*((DABService *)b)).CompID & 0xFF;
+static int compareCompID(const void* a, const void* b) {
+  uint32_t compID_a = (*((DABService*)a)).CompID & 0xFF;
+  uint32_t compID_b = (*((DABService*)b)).CompID & 0xFF;
 
   if (compID_a < compID_b) return -1;
   if (compID_a > compID_b) return 1;
   return 0;
 }
 
-static void RDScharConverter(const char* input, wchar_t* output, size_t size) {
+static void charConverter(const char* input, wchar_t* output, size_t outSize) {
+    if (!input || !output || outSize == 0) return;
 
-  size_t i = 0;
-  for (size_t dbi = 0; dbi < size - 1; dbi++) {
-    char currentChar = input[dbi];
-    if ((currentChar >> 5) == 0x6) {
-      if ((input[dbi + 1] >> 6) == 0x2) {
-        if (input[dbi + 1] == 0xA9) {
-          currentChar = 0x82;
-          dbi++;
-        }
-        if (input[dbi + 1] == 0xB0) {
-          currentChar = 0xB0;
-          dbi++;
-        }
-      }
-    }
+    size_t i = 0;
 
-    switch (currentChar) {
-      case 0x20: output[i] = L' '; break;
-      case 0x21 ... 0x5D: output[i] = static_cast<wchar_t>(currentChar); break;
-      case 0x5E: output[i] = L'―'; break;
-      case 0x5F: output[i] = L'_'; break;
-      case 0x60: output[i] = L'`'; break;
-      case 0x61 ... 0x7d: output[i] = static_cast<wchar_t>(currentChar); break;
-      case 0x7E: output[i] = L'¯'; break;
-      case 0x7F: output[i] = L' '; break;
-      case 0x80: output[i] = L'á'; break;
-      case 0x81: output[i] = L'à'; break;
-      case 0x82: output[i] = L'é'; break;
-      case 0x83: output[i] = L'è'; break;
-      case 0x84: output[i] = L'í'; break;
-      case 0x85: output[i] = L'ì'; break;
-      case 0x86: output[i] = L'ó'; break;
-      case 0x87: output[i] = L'ò'; break;
-      case 0x88: output[i] = L'ú'; break;
-      case 0x89: output[i] = L'ù'; break;
-      case 0x8A: output[i] = L'Ñ'; break;
-      case 0x8B: output[i] = L'Ç'; break;
-      case 0x8C: output[i] = L'Ş'; break;
-      case 0x8D: output[i] = L'β'; break;
-      case 0x8E: output[i] = L'¡'; break;
-      case 0x8F: output[i] = L'Ĳ'; break;
-      case 0x90: output[i] = L'â'; break;
-      case 0x91: output[i] = L'ä'; break;
-      case 0x92: output[i] = L'ê'; break;
-      case 0x93: output[i] = L'ë'; break;
-      case 0x94: output[i] = L'î'; break;
-      case 0x95: output[i] = L'ï'; break;
-      case 0x96: output[i] = L'ô'; break;
-      case 0x97: output[i] = L'ö'; break;
-      case 0x98: output[i] = L'û'; break;
-      case 0x99: output[i] = L'ü'; break;
-      case 0x9A: output[i] = L'ñ'; break;
-      case 0x9B: output[i] = L'ç'; break;
-      case 0x9C: output[i] = L'ş'; break;
-      case 0x9D: output[i] = L'ǧ'; break;
-      case 0x9E: output[i] = L'ı'; break;
-      case 0x9F: output[i] = L'ĳ'; break;
-      case 0xA0: output[i] = L'ª'; break;
-      case 0xA1: output[i] = L'α'; break;
-      case 0xA2: output[i] = L'©'; break;
-      case 0xA3: output[i] = L'‰'; break;
-      case 0xA4: output[i] = L'Ǧ'; break;
-      case 0xA5: output[i] = L'ě'; break;
-      case 0xA6: output[i] = L'ň'; break;
-      case 0xA7: output[i] = L'ő'; break;
-      case 0xA8: output[i] = L'π'; break;
-      case 0xA9: output[i] = L'€'; break;
-      case 0xAA: output[i] = L'£'; break;
-      case 0xAB: output[i] = L'$'; break;
-      case 0xAC: output[i] = L'←'; break;
-      case 0xAD: output[i] = L'↑'; break;
-      case 0xAE: output[i] = L'→'; break;
-      case 0xAF: output[i] = L'↓'; break;
-      case 0xB0: output[i] = L'º'; break;
-      case 0xB1: output[i] = L'¹'; break;
-      case 0xB2: output[i] = L'²'; break;
-      case 0xB3: output[i] = L'³'; break;
-      case 0xB4: output[i] = L'±'; break;
-      case 0xB5: output[i] = L'İ'; break;
-      case 0xB6: output[i] = L'ń'; break;
-      case 0xB7: output[i] = L'ű'; break;
-      case 0xB8: output[i] = L'µ'; break;
-      case 0xB9: output[i] = L'¿'; break;
-      case 0xBA: output[i] = L'÷'; break;
-      case 0xBB: output[i] = L'°'; break;
-      case 0xBC: output[i] = L'¼'; break;
-      case 0xBD: output[i] = L'½'; break;
-      case 0xBE: output[i] = L'¾'; break;
-      case 0xBF: output[i] = L'§'; break;
-      case 0xC0: output[i] = L'Á'; break;
-      case 0xC1: output[i] = L'À'; break;
-      case 0xC2: output[i] = L'É'; break;
-      case 0xC3: output[i] = L'È'; break;
-      case 0xC4: output[i] = L'Í'; break;
-      case 0xC5: output[i] = L'Ì'; break;
-      case 0xC6: output[i] = L'Ó'; break;
-      case 0xC7: output[i] = L'Ò'; break;
-      case 0xC8: output[i] = L'Ú'; break;
-      case 0xC9: output[i] = L'Ù'; break;
-      case 0xCA: output[i] = L'Ř'; break;
-      case 0xCB: output[i] = L'Č'; break;
-      case 0xCC: output[i] = L'Š'; break;
-      case 0xCD: output[i] = L'Ž'; break;
-      case 0xCE: output[i] = L'Ð'; break;
-      case 0xCF: output[i] = L'Ŀ'; break;
-      case 0xD0: output[i] = L'Â'; break;
-      case 0xD1: output[i] = L'Ä'; break;
-      case 0xD2: output[i] = L'Ê'; break;
-      case 0xD3: output[i] = L'Ë'; break;
-      case 0xD4: output[i] = L'Î'; break;
-      case 0xD5: output[i] = L'Ï'; break;
-      case 0xD6: output[i] = L'Ô'; break;
-      case 0xD7: output[i] = L'Ö'; break;
-      case 0xD8: output[i] = L'Û'; break;
-      case 0xD9: output[i] = L'Ü'; break;
-      case 0xDA: output[i] = L'ř'; break;
-      case 0xDB: output[i] = L'č'; break;
-      case 0xDC: output[i] = L'š'; break;
-      case 0xDD: output[i] = L'ž'; break;
-      case 0xDE: output[i] = L'đ'; break;
-      case 0xDF: output[i] = L'ŀ'; break;
-      case 0xE0: output[i] = L'Ã'; break;
-      case 0xE1: output[i] = L'Å'; break;
-      case 0xE2: output[i] = L'Æ'; break;
-      case 0xE3: output[i] = L'Œ'; break;
-      case 0xE4: output[i] = L'ŷ'; break;
-      case 0xE5: output[i] = L'Ý'; break;
-      case 0xE6: output[i] = L'Õ'; break;
-      case 0xE7: output[i] = L'Ø'; break;
-      case 0xE8: output[i] = L'Þ'; break;
-      case 0xE9: output[i] = L'Ŋ'; break;
-      case 0xEA: output[i] = L'Ŕ'; break;
-      case 0xEB: output[i] = L'Ć'; break;
-      case 0xEC: output[i] = L'Ś'; break;
-      case 0xED: output[i] = L'Ź'; break;
-      case 0xEE: output[i] = L'Ŧ'; break;
-      case 0xEF: output[i] = L'ð'; break;
-      case 0xF0: output[i] = L'ã'; break;
-      case 0xF1: output[i] = L'å'; break;
-      case 0xF2: output[i] = L'æ'; break;
-      case 0xF3: output[i] = L'œ'; break;
-      case 0xF4: output[i] = L'ŵ'; break;
-      case 0xF5: output[i] = L'ý'; break;
-      case 0xF6: output[i] = L'õ'; break;
-      case 0xF7: output[i] = L'ø'; break;
-      case 0xF8: output[i] = L'þ'; break;
-      case 0xF9: output[i] = L'ŋ'; break;
-      case 0xFA: output[i] = L'ŕ'; break;
-      case 0xFB: output[i] = L'ć'; break;
-      case 0xFC: output[i] = L'ś'; break;
-      case 0xFD: output[i] = L'ź'; break;
-      case 0xFE: output[i] = L'ŧ'; break;
-      case 0xFF: output[i] = L' '; break;
+    for (size_t dbi = 0; input[dbi] != '\0' && i < outSize - 1; dbi++) {
+        uint8_t currentChar = (uint8_t)input[dbi];
+
+        // ----- 2-byte UTF-8 decoding -----
+        if ((currentChar & 0xE0) == 0xC0) {
+            uint8_t nextChar = (uint8_t)input[dbi + 1];
+
+            if ((nextChar & 0xC0) == 0x80) {
+                // decode the Unicode code point
+                uint16_t codepoint = ((currentChar & 0x1F) << 6) | (nextChar & 0x3F);
+                output[i++] = (wchar_t)codepoint;
+                dbi++; // skip the second byte
+                continue;
+            }
+        }
+
+        // ----- Single-byte / fallback -----
+        switch (currentChar) {
+            case 0x20: output[i] = L' '; break;
+            case 0x21 ... 0x5D: output[i] = (wchar_t)currentChar; break;
+            case 0x5E: output[i] = L'―'; break;
+            case 0x5F: output[i] = L'_'; break;
+            case 0x60: output[i] = L'`'; break;
+            case 0x61 ... 0x7D: output[i] = (wchar_t)currentChar; break;
+            case 0x7E: output[i] = L'¯'; break;
+            case 0x7F: output[i] = L' '; break;
+            case 0x80: output[i] = L'á'; break;
+            case 0x81: output[i] = L'à'; break;
+            case 0x82: output[i] = L'é'; break;
+            case 0x83: output[i] = L'è'; break;
+            case 0x84: output[i] = L'í'; break;
+            case 0x85: output[i] = L'ì'; break;
+            case 0x86: output[i] = L'ó'; break;
+            case 0x87: output[i] = L'ò'; break;
+            case 0x88: output[i] = L'ú'; break;
+            case 0x89: output[i] = L'ù'; break;
+            case 0x8A: output[i] = L'Ñ'; break;
+            case 0x8B: output[i] = L'Ç'; break;
+            case 0x8C: output[i] = L'Ş'; break;
+            case 0x8D: output[i] = L'β'; break;
+            case 0x8E: output[i] = L'¡'; break;
+            case 0x8F: output[i] = L'Ĳ'; break;
+            case 0x90: output[i] = L'â'; break;
+            case 0x91: output[i] = L'ä'; break;
+            case 0x92: output[i] = L'ê'; break;
+            case 0x93: output[i] = L'ë'; break;
+            case 0x94: output[i] = L'î'; break;
+            case 0x95: output[i] = L'ï'; break;
+            case 0x96: output[i] = L'ô'; break;
+            case 0x97: output[i] = L'ö'; break;
+            case 0x98: output[i] = L'û'; break;
+            case 0x99: output[i] = L'ü'; break;
+            case 0x9A: output[i] = L'ñ'; break;
+            case 0x9B: output[i] = L'ç'; break;
+            case 0x9C: output[i] = L'ş'; break;
+            case 0x9D: output[i] = L'ǧ'; break;
+            case 0x9E: output[i] = L'ı'; break;
+            case 0x9F: output[i] = L'ĳ'; break;
+            case 0xFF: output[i] = L' '; break;
+            default: output[i] = L'?'; break;
+        }
+        i++;
     }
-    i++;
-  }
-  output[i - 1] = L'\0';
+    output[i] = L'\0';
 }
 
-static String extractUTF8Substring(const String & utf8String, size_t start, size_t length) {
+static String extractUTF8Substring(const String& utf8String, size_t start, size_t length) {
   String substring;
   size_t utf8Length = utf8String.length();
   size_t utf8Index = 0;
