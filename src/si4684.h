@@ -127,7 +127,6 @@ class DAB {
     void vol(uint8_t vol);
 
   private:
-    bool ParseServiceList(bool first, uint8_t* data, uint16_t len);
     bool SlideShowInit;
     bool SlideShowNew;
     bool SlideShowRecover;
@@ -141,7 +140,6 @@ class DAB {
     uint32_t SlideShowByteCounter;
     uint32_t SlideShowLengthOld;
     void parseEPG(void);
-    void ParseServiceList(void);
     void RecoverSlideShow(void);
 };
 

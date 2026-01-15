@@ -132,6 +132,30 @@ TFT_eSprite ShortSprite = TFT_eSprite(&tft);
 
 DABMemory memory[EE_PRESETS_CNT];
 
+// Forward declarations
+void DefaultSettings(void);
+void read_encoder(void);
+void read_encoder2(void);
+void DoMemoryPosTune(void);
+void ProcessDAB(void);
+void Seek(bool mode);
+void deepSleep(void);
+void StoreFrequency(void);
+void closeVolume(void);
+void KeyUp(void);
+void KeyDown(void);
+void KeyUp2(void);
+void KeyDown2(void);
+void ModeButtonPress(void);
+void SlideShowButtonPress(void);
+void StandbyButtonPress(void);
+void ButtonPress(void);
+void Button2Press(void);
+void doRecovery(void);
+void doStandby(void);
+void DABSelectService(bool dir);
+bool IsStationEmpty(void);
+
 void setup(void) {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
   gpio_set_drive_capability((gpio_num_t) 4, GPIO_DRIVE_CAP_0);

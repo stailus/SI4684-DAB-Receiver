@@ -114,10 +114,12 @@ static void Set_Property(uint16_t property, uint16_t value) {
 static void cts(void) {
   bool timeout = false;
   uint16_t countdown = 1000;
+
   while (!(SPIbuffer[1] & 0x80)) {
     delay(4);
-    for (byte i = 0; i < 5; i++) SPIbuffer[i] = 0;
+    memset(SPIbuffer, 0, 5);
     SPIwrite(SPIbuffer, 5);
+
     countdown--;
     if (countdown == 0) {
       timeout = true;
@@ -126,8 +128,11 @@ static void cts(void) {
   }
 
   if (SPIbuffer[1] & 0x40) {
-    for (byte i = 0; i < 5; i++) SPIbuffer[i] = 0;
-    if (timeout) SPIbuffer[5] |= (1 << 7);
+    memset(SPIbuffer, 0, 5);
+  }
+
+  if (timeout && sizeof(SPIbuffer) > 5) {
+    SPIbuffer[5] |= (1 << 7);
   }
 }
 
@@ -273,6 +278,8 @@ void DAB::EnsembleInfo(void) {
       numberofservices = SPIbuffer[9];
       if (numberofservices > sizeof(service) / sizeof(DABService)) {
         clearData();  // Handle overflow when signal is crappy
+        numberofservices = 0;
+        return;
       }
 
       uint16_t offset = 13;
@@ -280,6 +287,8 @@ void DAB::EnsembleInfo(void) {
       for (uint8_t i = 0; i < numberofservices; i++) {
         if (i >= sizeof(service) / sizeof(DABService)) {
           clearData();  // Handle overflow when signal is crappy
+          numberofservices = 0;
+          return;
         }
 
         serviceID = SPIbuffer[offset + 3];
