@@ -380,7 +380,7 @@ void DAB::EnsembleInfo(void) {
             break;
           }
         }
-        ecc = SPIbuffer[23];
+        ensembleEcc = SPIbuffer[23];
         EnsembleLabelCharset = SPIbuffer[24];
       } else {
         EnsembleInfoSet = false;
@@ -658,6 +658,10 @@ void DAB::ServiceInfo(void) {
 
       pty = (SPIbuffer[5] >> 1) & 0x1F;
       ServiceLabelCharset = SPIbuffer[7];
+
+      // Use service ECC if available, otherwise fall back to ensemble ECC
+      uint8_t srvEcc = SPIbuffer[8];
+      ecc = (srvEcc != 0) ? srvEcc : ensembleEcc;
     }
   }
 }
@@ -687,6 +691,7 @@ void DAB::setFreq(uint8_t freq) {
   SID[0] = '\0';
   pty = 36;
   ecc = 0;
+  ensembleEcc = 0;
   protectionlevel = 0;
   bitrate = 0;
   dataServiceCheck = 0;

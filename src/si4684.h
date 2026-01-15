@@ -97,6 +97,7 @@ class DAB {
     String ASCII(const char* input, uint8_t charset);
     uint16_t bitrate;
     uint16_t ecc;
+    uint16_t ensembleEcc;
     uint16_t getRSSI(void);
     uint16_t samplerate;
     uint16_t Year;
