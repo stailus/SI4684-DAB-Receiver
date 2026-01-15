@@ -8,6 +8,7 @@
 #include "firmware.h"
 #include <SPI.h>
 #include <cstring>
+#include <climits>
 
 extern TFT_eSPI tft;
 
@@ -132,6 +133,8 @@ class DAB {
     bool SlideShowRecover;
     char ChipType[7];
     char FirmwVersion[6];
+    bool deleteOldestSlideshow(void);
+    bool ensureFreeSpace(size_t requiredBytes);
     String getDynamicFilename(void);
     uint32_t componentID;
     uint32_t CurrentServiceID;

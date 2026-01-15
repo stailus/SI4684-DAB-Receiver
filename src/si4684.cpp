@@ -442,9 +442,12 @@ void DAB::getServiceData(void) {
               destinationFile.close();
             }
 
-            size_t freeSpace = LittleFS.totalBytes() - LittleFS.usedBytes();
-            if (BufferSlideShow && freeSpace >= 100 * 1024) {
+            if (BufferSlideShow) {
+              // Remove existing file for this service if present
               if (LittleFS.exists("/" + getDynamicFilename())) LittleFS.remove("/" + getDynamicFilename());
+
+              // Ensure enough free space (100KB reserve for slideshow.img + new file)
+              ensureFreeSpace(100 * 1024);
 
               sourceFile = LittleFS.open("/temp.img", "rb");
               if (sourceFile) {
@@ -527,6 +530,48 @@ void DAB::getServiceData(void) {
 
 void DAB::parseEPG(void) {
   // To do
+}
+
+bool DAB::deleteOldestSlideshow(void) {
+  File root = LittleFS.open("/");
+  if (!root || !root.isDirectory()) return false;
+
+  String oldestFile = "";
+  time_t oldestTime = LONG_MAX;
+
+  File file = root.openNextFile();
+  while (file) {
+    String filename = file.name();
+    // Only consider {serviceID}.img files (hex name + .img, not slideshow.img or temp.img)
+    if (filename.endsWith(".img") && filename != "slideshow.img" && filename != "temp.img") {
+      time_t fileTime = file.getLastWrite();
+      if (fileTime < oldestTime) {
+        oldestTime = fileTime;
+        oldestFile = "/" + filename;
+      }
+    }
+    file = root.openNextFile();
+  }
+  root.close();
+
+  if (oldestFile.length() > 0) {
+    LittleFS.remove(oldestFile);
+    return true;
+  }
+  return false;
+}
+
+bool DAB::ensureFreeSpace(size_t requiredBytes) {
+  size_t freeSpace = LittleFS.totalBytes() - LittleFS.usedBytes();
+
+  // Keep removing oldest slideshows until we have enough space
+  while (freeSpace < requiredBytes) {
+    if (!deleteOldestSlideshow()) {
+      return false;  // No more files to delete
+    }
+    freeSpace = LittleFS.totalBytes() - LittleFS.usedBytes();
+  }
+  return true;
 }
 
 String DAB::getDynamicFilename(void) {
