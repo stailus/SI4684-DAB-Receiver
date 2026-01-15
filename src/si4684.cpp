@@ -648,6 +648,8 @@ void DAB::setFreq(uint8_t freq) {
   ServiceStart = false;
   SlideShowInit = false;
   SlideShowAvailable = false;
+
+  // DAB_TUNE_FREQ command
   SPIbuffer[0] = 0xB0;
   SPIbuffer[1] = 0x00;
   SPIbuffer[2] = freq;
@@ -655,15 +657,21 @@ void DAB::setFreq(uint8_t freq) {
   SPIbuffer[4] = 0x00;
   SPIbuffer[5] = 0x00;
   SPIwrite(SPIbuffer, 6);
+  cts();
 
-  uint16_t timeout = 1000;
+  uint16_t timeout = 250;
   while (bitRead(SPIbuffer[1], 0) == false) {
     delay(20);
-    for (byte i = 0; i < 5; i++) SPIbuffer[i] = 0;
+    memset(SPIbuffer, 0, 5);
     SPIwrite(SPIbuffer, 5);
     timeout--;
-    if (timeout <= 0) break;
+    if (timeout == 0) break;
   }
+
+  SPIbuffer[0] = 0xB2;
+  SPIbuffer[1] = 0x01;
+  SPIwrite(SPIbuffer, 2);
+  cts();
 }
 
 void DAB::setService(uint8_t _index) {
