@@ -425,83 +425,87 @@ void DAB::getServiceData(void) {
           for (byte_number = 0; byte_number < byte_count; byte_number++) ServiceData[byte_number] = (char)SPIbuffer[27 + byte_number];
           ServiceData[byte_number] = '\0';
 
-          // Read Slideshow initialisation and finish Slideshow
+          // Read Slideshow header - extract total length
         } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count < 65) {
-          if (SlideShowLength == SlideShowByteCounter && SlideShowInit) {
-            // Open source file
-            File sourceFile = LittleFS.open("/temp.img", "rb");
-            if (!sourceFile) return;
+          uint32_t newLength = (((uint16_t)SPIbuffer[35] << 12) | ((uint16_t)SPIbuffer[36] << 4) | ((uint16_t)SPIbuffer[37] >> 4)) & 0x00FFFF;
 
-            // Remove existing slideshow file
-            if (LittleFS.exists("/slideshow.img")) LittleFS.remove("/slideshow.img");
+          if (newLength > 0 && newLength != SlideShowLengthOld) {
+            // Check if this is a new slideshow or same one we're already collecting
+            if (SlideShowLength == 0 || SlideShowLength == newLength) {
+              // Same slideshow or first header - just set length, keep existing segments
+              SlideShowLength = newLength;
+              SlideShowNew = true;
+              SlideShowInit = true;
 
-            // Create and copy to destination file
-            File destinationFile = LittleFS.open("/slideshow.img", "wb");
-            if (destinationFile) {
-              while (sourceFile.available()) destinationFile.write(byte(sourceFile.read()));
-              destinationFile.close();
+              // Check if we already have all bytes
+              if (SlideShowByteCounter >= SlideShowLength) {
+                SlideShowTotalSegments = SlideShowHighestSegment + 1;
+                assembleSlideshow();
+              }
+            } else {
+              // Different slideshow - reset everything
+              SlideShowLength = newLength;
+              SlideShowNew = true;
+              SlideShowInit = true;
+              SlideShowByteCounter = 0;
+              SlideShowHighestSegment = 0;
+              SlideShowTotalSegments = 0;
+
+              memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
+
+              for (uint8_t i = 0; i < 255; i++) {
+                String segFile = "/seg_" + String(i) + ".bin";
+                if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
+                else if (i > 10) break;
+              }
+              if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
             }
+          }
 
-            if (BufferSlideShow) {
-              // Remove existing file for this service if present
-              if (LittleFS.exists("/" + getDynamicFilename())) LittleFS.remove("/" + getDynamicFilename());
+          // Read Slideshow packets - store each segment (works with or without header)
+        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && (SPIbuffer[27] == 0x00 || SPIbuffer[27] == 0x80) && SPIbuffer[29] == 0x12) {
+          uint8_t segmentNumber = SPIbuffer[28];
+          uint8_t byteIndex = segmentNumber / 8;
+          uint8_t bitIndex = segmentNumber % 8;
 
-              // Ensure enough free space (100KB reserve for slideshow.img + new file)
-              ensureFreeSpace(100 * 1024);
+          // Check if we already have this segment
+          if (!(SlideShowSegmentBitmap[byteIndex] & (1 << bitIndex))) {
+            uint16_t dataLen = byte_count - 11;
 
-              sourceFile = LittleFS.open("/temp.img", "rb");
-              if (sourceFile) {
-                File piFile = LittleFS.open("/" + getDynamicFilename(), "wb");
-                if (piFile) {
-                  while (sourceFile.available()) piFile.write(byte(sourceFile.read()));
-                  piFile.close();
+            // Ensure enough free space for segment (with margin)
+            ensureFreeSpace(dataLen + 4096);
+
+            // Save segment to individual file
+            String segFile = "/seg_" + String(segmentNumber) + ".bin";
+            File slideshowFile = LittleFS.open(segFile, "wb");
+            if (slideshowFile) {
+              slideshowFile.write(&SPIbuffer[34], dataLen);
+              slideshowFile.close();
+
+              // Mark segment as received and update highest seen
+              SlideShowSegmentBitmap[byteIndex] |= (1 << bitIndex);
+              SlideShowByteCounter += dataLen;
+              if (segmentNumber > SlideShowHighestSegment) {
+                SlideShowHighestSegment = segmentNumber;
+              }
+              SlideShowInit = true;
+
+              // Check if complete - using byte count when we have header length
+              if (SlideShowLength > 0 && SlideShowByteCounter >= SlideShowLength) {
+                SlideShowTotalSegments = SlideShowHighestSegment + 1;
+                assembleSlideshow();
+              } else if (SlideShowLength == 0 && SlideShowHighestSegment > 0) {
+                // No header - check if we have segment 0 AND all segments up to highest
+                bool haveSegment0 = (SlideShowSegmentBitmap[0] & 1) != 0;
+                if (haveSegment0 && allSegmentsReceived()) {
+                  SlideShowTotalSegments = SlideShowHighestSegment + 1;
+                  assembleSlideshow();
                 }
               }
             }
-
-            // Remove old temporary file
-            sourceFile.close();
-            LittleFS.remove("/temp.img");
-
-            // Update variables
-            SlideShowLengthOld = SlideShowLength;
-            SlideShowUpdate = true;
-            SlideShowUpdate2 = true;
-            SlideShowAvailable = true;
-            SlideShowInit = false;
           }
-
-
-          SlideShowLength = (((uint16_t)SPIbuffer[35] << 12) | ((uint16_t)SPIbuffer[36] << 4) | ((uint16_t)SPIbuffer[37] >> 4)) & 0x00FFFF;
-
-          if (SlideShowLength > 0 && SlideShowLength != SlideShowLengthOld) {
-            SlideShowNew = true;
-            SlideShowInit = true;
-            SlideShowByteCounter = 0;
-            if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
-          } else {
-            SlideShowNew = false;
-          }
-
-          // Read Slideshow packets
-        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && (SPIbuffer[27] == 0x00 || SPIbuffer[27] == 0x80) && SPIbuffer[29] == 0x12 && SlideShowNew) {
-          File slideshowFile;
-          if (SlideShowInit) {
-            if (!LittleFS.exists("/temp.img")) {
-              slideshowFile = LittleFS.open("/temp.img", "wb");
-              if (!slideshowFile) return;
-              slideshowFile.close();
-            }
-
-            slideshowFile = LittleFS.open("/temp.img", "ab");
-            if (!slideshowFile) return;
-
-            for (byte_number = 0; byte_number < byte_count - 11; byte_number++) {
-              slideshowFile.write(SPIbuffer[34 + byte_number]);
-              SlideShowByteCounter++;
-            }
-            slideshowFile.close();
-          }
+          // Note: Duplicate segments are simply ignored - no reset needed
+          // New slideshows are detected via header with different length
         } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x00) {
           if (SPIbuffer[28] == 0x00 && SPIbuffer[34] == 0x02) processEPG = true;
           else if (SPIbuffer[28] == 0x00 && SPIbuffer[34] != 0x02) processEPG = false;
@@ -530,6 +534,85 @@ void DAB::getServiceData(void) {
 
 void DAB::parseEPG(void) {
   // To do
+}
+
+bool DAB::allSegmentsReceived(void) {
+  // Determine how many segments to check
+  uint8_t segmentsToCheck = SlideShowTotalSegments;
+  if (segmentsToCheck == 0) {
+    // No header received, use highest segment seen + 1
+    segmentsToCheck = SlideShowHighestSegment + 1;
+  }
+
+  if (segmentsToCheck == 0) return false;
+
+  for (uint8_t i = 0; i < segmentsToCheck; i++) {
+    uint8_t byteIndex = i / 8;
+    uint8_t bitIndex = i % 8;
+    if (!(SlideShowSegmentBitmap[byteIndex] & (1 << bitIndex))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void DAB::assembleSlideshow(void) {
+  // Ensure enough free space for assembled slideshow
+  // Note: segment files will be deleted during assembly, freeing space
+  // But we need initial space for the destination file
+  ensureFreeSpace(SlideShowByteCounter + 4096);
+
+  // Remove existing slideshow file
+  if (LittleFS.exists("/slideshow.img")) LittleFS.remove("/slideshow.img");
+
+  // Create destination file
+  File destFile = LittleFS.open("/slideshow.img", "wb");
+  if (!destFile) {
+    return;
+  }
+
+  // Concatenate all segments in order
+  for (uint8_t i = 0; i < SlideShowTotalSegments; i++) {
+    String segFile = "/seg_" + String(i) + ".bin";
+    File srcFile = LittleFS.open(segFile, "rb");
+    if (srcFile) {
+      while (srcFile.available()) {
+        destFile.write(srcFile.read());
+      }
+      srcFile.close();
+      // Remove segment file after copying
+      LittleFS.remove(segFile);
+    }
+  }
+
+  destFile.close();
+
+  // Also save to service-specific file if buffering is enabled
+  if (BufferSlideShow) {
+    if (LittleFS.exists("/" + getDynamicFilename())) {
+      LittleFS.remove("/" + getDynamicFilename());
+    }
+    ensureFreeSpace(100 * 1024);
+
+    File srcFile = LittleFS.open("/slideshow.img", "rb");
+    if (srcFile) {
+      File piFile = LittleFS.open("/" + getDynamicFilename(), "wb");
+      if (piFile) {
+        while (srcFile.available()) {
+          piFile.write(srcFile.read());
+        }
+        piFile.close();
+      }
+      srcFile.close();
+    }
+  }
+
+  // Update state
+  SlideShowLengthOld = SlideShowLength;
+  SlideShowUpdate = true;
+  SlideShowUpdate2 = true;
+  SlideShowAvailable = true;
+  SlideShowInit = false;
 }
 
 bool DAB::deleteOldestSlideshow(void) {
@@ -742,7 +825,20 @@ void DAB::setService(uint8_t _index) {
   SlideShowInit = false;
   ServiceStart = true;
   ServiceIndex = _index;
+
+  // Reset segment tracking
+  memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
+  SlideShowTotalSegments = 0;
+  SlideShowHighestSegment = 0;
+  SlideShowTransportID = 0;
+
+  // Remove old temp and segment files
   if (LittleFS.exists("/temp.img")) LittleFS.remove("/temp.img");
+  for (uint8_t i = 0; i < 255; i++) {
+    String segFile = "/seg_" + String(i) + ".bin";
+    if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
+    else break;  // Stop when no more segment files exist
+  }
 
   SPIbuffer[0] = 0x81;
   SPIbuffer[1] = 0x00;
@@ -785,8 +881,9 @@ void DAB::RecoverSlideShow(void) {
       File destinationFile = LittleFS.open("/slideshow.img", "wb");
 
       if (destinationFile) {
-        while (sourceFile.available()) destinationFile.write(byte(sourceFile.read()));
-
+        while (sourceFile.available()) {
+          destinationFile.write(byte(sourceFile.read()));
+        }
         sourceFile.close();
         destinationFile.close();
         SlideShowAvailable = true;

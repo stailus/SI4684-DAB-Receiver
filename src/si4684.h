@@ -143,6 +143,15 @@ class DAB {
     uint32_t serviceID;
     uint32_t SlideShowByteCounter;
     uint32_t SlideShowLengthOld;
+
+    // Segment buffering for faster slideshow assembly
+    uint8_t SlideShowSegmentBitmap[32];  // Bitmap for up to 256 segments
+    uint8_t SlideShowTotalSegments;       // Total segments expected (0 = unknown)
+    uint8_t SlideShowHighestSegment;      // Highest segment number seen
+    uint16_t SlideShowTransportID;        // Current transport ID
+    void assembleSlideshow(void);
+    bool allSegmentsReceived(void);
+
     void parseEPG(void);
     void RecoverSlideShow(void);
 };

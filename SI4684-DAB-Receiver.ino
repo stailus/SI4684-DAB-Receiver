@@ -168,8 +168,16 @@ void setup(void) {
   gpio_set_drive_capability((gpio_num_t) 21, GPIO_DRIVE_CAP_0);
   gpio_set_drive_capability((gpio_num_t) 22, GPIO_DRIVE_CAP_0);
   setupmode = true;
-  LittleFS.begin();
-  LittleFS.format();
+
+  // Initialize and format LittleFS (clean slate on every boot)
+  if (!LittleFS.begin(false)) {
+    LittleFS.format();
+    LittleFS.begin(false);
+  } else {
+    LittleFS.format();
+    LittleFS.end();
+    LittleFS.begin(false);
+  }
 
   Serial.begin(1000000);
 
