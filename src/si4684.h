@@ -3,14 +3,11 @@
 
 #include "Arduino.h"
 #include <LittleFS.h>
-#include <TFT_eSPI.h>
 #include "Si468xROM.h"
 #include "firmware.h"
 #include <SPI.h>
 #include <cstring>
 #include <climits>
-
-extern TFT_eSPI tft;
 
 struct DABFrequencyLabel_DAB {
   uint32_t frequency;
