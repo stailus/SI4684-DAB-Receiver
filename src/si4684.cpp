@@ -115,10 +115,10 @@ static void Set_Property(uint16_t property, uint16_t value) {
 
 static void cts(void) {
   bool timeout = false;
-  uint16_t countdown = 1000;
+  uint16_t countdown = 200;
 
   while (!(SPIbuffer[1] & 0x80)) {
-    delay(4);
+    delay(2);
     memset(SPIbuffer, 0, 5);
     SPIwrite(SPIbuffer, 5);
 
