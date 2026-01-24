@@ -935,14 +935,14 @@ void DefaultSettings(void) {
   EEPROM.writeByte(EE_BYTE_ROTARYMODE, 0);
   EEPROM.writeByte(EE_BYTE_TUNEMODE, 0);
   EEPROM.writeByte(EE_BYTE_UNIT, 0);
-  EEPROM.writeByte(EE_BYTE_VOLUME, 40);
+  EEPROM.writeByte(EE_BYTE_VOLUME, 62);
   EEPROM.writeByte(EE_BYTE_MEMORYPOS, 0);
   EEPROM.writeByte(EE_BYTE_AUTOSLIDESHOW, 0);
   EEPROM.writeByte(EE_BYTE_BUFFERSLIDESHOW, 1);
   EEPROM.writeByte(EE_BYTE_TOT, 0);
   EEPROM.writeByte(EE_BYTE_THEME, 0);
-  EEPROM.put(EE_UINT32_SERVICEID, 0);
-  EEPROM.put(EE_BYTE_DABFREQ, 0);
+  EEPROM.put(EE_UINT32_SERVICEID, (uint32_t)0);
+  EEPROM.writeByte(EE_BYTE_DABFREQ, 0);
   for (int y = 0; y < 17; y++) {
     EEPROM.writeByte(EE_CHAR17_SERVICENAME + y, '\0');
   }
