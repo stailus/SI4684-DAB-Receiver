@@ -886,7 +886,9 @@ void Seek(bool mode) {
   radio.ServiceStart = false;
   ShowFreq();
   radio.Update();
-  if (radio.signallock) seek = false;
+  if (radio.signallock) {
+    seek = false;
+  }
 }
 
 void read_encoder(void) {

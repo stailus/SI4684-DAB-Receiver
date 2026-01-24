@@ -59,8 +59,10 @@ bool DAB::panic(void) {
   SPIwrite(SPIbuffer, 2);
   cts();
   SPIread(6);
-  if (SPIbuffer[5] == 0x09) return true;
-  else return false;
+  if (SPIbuffer[5] == 0x09) {
+    return true;
+  }
+  return false;
 }
 
 uint16_t DAB::getRSSI(void) {
@@ -255,6 +257,9 @@ bool DAB::begin(uint8_t SSpin) {
 }
 
 void DAB::EnsembleInfo(void) {
+  static bool lastSignalLock = false;
+  static uint8_t lastFic = 0;
+
   SPIbuffer[0] = 0xB2;  // Get signalstatus
   SPIbuffer[1] = 0x09;
   SPIwrite(SPIbuffer, 2);
@@ -264,6 +269,13 @@ void DAB::EnsembleInfo(void) {
   cnr = SPIbuffer[10];
   if (fic > 0) signallock = true;
   else signallock = false;
+
+  // Log signal changes
+  if (signallock != lastSignalLock) {
+    lastSignalLock = signallock;
+  }
+
+  lastFic = fic;
   if (signallock) {
     SPIbuffer[0] = 0x80;  // Get servicelist
     SPIbuffer[1] = 0x00;
@@ -587,6 +599,37 @@ void DAB::assembleSlideshow(void) {
 
   destFile.close();
 
+  // Validate assembled file size matches expected length
+  if (SlideShowLength > 0) {
+    File checkFile = LittleFS.open("/slideshow.img", "rb");
+    if (checkFile) {
+      size_t actualSize = checkFile.size();
+      checkFile.close();
+
+      if (actualSize != SlideShowLength) {
+        // Remove invalid slideshow
+        LittleFS.remove("/slideshow.img");
+
+        // Clean up any remaining segment files
+        for (uint8_t i = 0; i < 255; i++) {
+          String segFile = "/seg_" + String(i) + ".bin";
+          if (LittleFS.exists(segFile)) LittleFS.remove(segFile);
+          else if (i > SlideShowTotalSegments + 10) break;
+        }
+
+        // Reset state to start fresh
+        SlideShowByteCounter = 0;
+        SlideShowHighestSegment = 0;
+        SlideShowTotalSegments = 0;
+        SlideShowLength = 0;
+        SlideShowInit = false;
+        memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
+
+        return;
+      }
+    }
+  }
+
   // Also save to service-specific file if buffering is enabled
   if (BufferSlideShow) {
     if (LittleFS.exists("/" + getDynamicFilename())) {
@@ -654,6 +697,7 @@ bool DAB::ensureFreeSpace(size_t requiredBytes) {
     }
     freeSpace = LittleFS.totalBytes() - LittleFS.usedBytes();
   }
+
   return true;
 }
 
@@ -798,7 +842,9 @@ void DAB::setFreq(uint8_t freq) {
     memset(SPIbuffer, 0, 5);
     SPIwrite(SPIbuffer, 5);
     timeout--;
-    if (timeout == 0) break;
+    if (timeout == 0) {
+      break;
+    }
   }
 
   SPIbuffer[0] = 0xB2;
@@ -895,10 +941,16 @@ void DAB::RecoverSlideShow(void) {
 }
 
 void DAB::Update(void) {
-  if (signallock) getServiceData();
+  if (signallock) {
+    getServiceData();
+  }
+
   if (millis() - DataUpdate > 500 || !signallock) {
     EnsembleInfo();
-    if (signallock) ServiceInfo();
+
+    if (signallock) {
+      ServiceInfo();
+    }
     if (ServiceStart) RecoverSlideShow();
 
     if (ServiceStart) {
