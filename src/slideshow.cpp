@@ -13,6 +13,13 @@ void ShowSlideShow(void) {
     delay(5);
   }
 
+  auto restoreContrast = [&]() {
+    for (int x = 0; x <= ContrastSet; x++) {
+      analogWrite(CONTRASTPIN, x * 2 + 27);
+      delay(5);
+    }
+  };
+
   auto closeFiles = [&]() {
     if (jpgfile) {
       jpgfile.close();
@@ -43,11 +50,13 @@ void ShowSlideShow(void) {
     jpgfile = LittleFS.open("/slideshow.img", "rb");
     if (!jpgfile) {
       closeFiles();
+      restoreContrast();
       return;
     }
     bool decoded = JpegDec.decodeFsFile(jpgfile);
     if (!decoded) {
       closeFiles();
+      restoreContrast();
       return;
     }
     uint16_t mcu_w = JpegDec.MCUWidth;
@@ -79,6 +88,7 @@ void ShowSlideShow(void) {
     pngfile = LittleFS.open("/slideshow.img", "rb");
     if (!pngfile) {
       closeFiles();
+      restoreContrast();
       return;
     }
     int16_t rc = png.open("/slideshow.img",
@@ -105,6 +115,7 @@ void ShowSlideShow(void) {
 
     if (rc != PNG_SUCCESS) {
       closeFiles();
+      restoreContrast();
       return;
     }
 
