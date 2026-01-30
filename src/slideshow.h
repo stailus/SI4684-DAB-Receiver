@@ -2,9 +2,10 @@
 #define SLIDESHOW_H
 
 #include "Arduino.h"
+#include <FS.h>
 #include <LittleFS.h>
 #include <TFT_eSPI.h>
-#include <JPEGDecoder.h>            // https://github.com/Bodmer/JPEGDecoder
+#include <JPEGDEC.h>                // https://github.com/bitbank2/JPEGDEC
 #include <PNGdec.h>                 // https://github.com/bitbank2/PNGdec
 #include "si4684.h"
 #include "constants.h"
