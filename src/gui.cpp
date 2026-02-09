@@ -820,7 +820,7 @@ void ShowAudioMode(void) {
 void ShowECC(void) {
   if (eccold != radio.ecc || displayreset) {
     String ITU = "";
-    switch (radio.EID[0]) {
+    switch (radio.serviceHasOwnEcc ? radio.SID[0] : radio.EID[0]) {
       case '1':
         switch (radio.ecc) {
           case 0xe0: tft.pushImage(80, 110, 36, 23, de); ITU = "D"; break;
