@@ -368,33 +368,39 @@ void DAB::EnsembleInfo(void) {
       if (eidRaw != 0x0000 && eidRaw != 0xFFFF) {
         EnsembleInfoSet = true;
 
-        EID[2] = (SPIbuffer[5] & 0xF0) >> 4;
-        EID[3] = (SPIbuffer[5] & 0x0F);
-        EID[0] = (SPIbuffer[6] & 0xF0) >> 4;
-        EID[1] = (SPIbuffer[6] & 0x0F);
-        EID[4] = '\0';
+        // Only set EID/EnsembleLabel/ECC once after tuning; they don't change on the same frequency
+        // This prevents corrupted data during marginal signal from overwriting valid values
+        if (EID[0] == '\0') {
+          EID[2] = (SPIbuffer[5] & 0xF0) >> 4;
+          EID[3] = (SPIbuffer[5] & 0x0F);
+          EID[0] = (SPIbuffer[6] & 0xF0) >> 4;
+          EID[1] = (SPIbuffer[6] & 0x0F);
+          EID[4] = '\0';
 
-        for (int i = 0; i < 4; i++) {
-          if (EID[i] < 10) {
-            EID[i] += '0';
-          } else {
-            EID[i] += 'A' - 10;
+          for (int i = 0; i < 4; i++) {
+            if (EID[i] < 10) {
+              EID[i] += '0';
+            } else {
+              EID[i] += 'A' - 10;
+            }
           }
-        }
-        for (uint8_t i = 0; i < 16 && SPIbuffer[7 + i] != '\0'; i++) {
-          EnsembleLabel[i] = static_cast<char>(SPIbuffer[7 + i]);
-        }
-        EnsembleLabel[16] = '\0';
+          for (uint8_t i = 0; i < 16 && SPIbuffer[7 + i] != '\0'; i++) {
+            EnsembleLabel[i] = static_cast<char>(SPIbuffer[7 + i]);
+          }
+          EnsembleLabel[16] = '\0';
 
-        for (int8_t i = 15; i >= 0; i--) {
-          if (EnsembleLabel[i] == ' ' && EnsembleLabel[i + 1] == '\0') {
-            EnsembleLabel[i] = '\0';
-          } else {
-            break;
+          for (int8_t i = 15; i >= 0; i--) {
+            if (EnsembleLabel[i] == ' ' && EnsembleLabel[i + 1] == '\0') {
+              EnsembleLabel[i] = '\0';
+            } else {
+              break;
+            }
           }
+          EnsembleLabelCharset = SPIbuffer[24];
         }
-        ensembleEcc = SPIbuffer[23];
-        EnsembleLabelCharset = SPIbuffer[24];
+        if (ensembleEcc == 0 && SPIbuffer[23] != 0) {
+          ensembleEcc = SPIbuffer[23];
+        }
       } else {
         EnsembleInfoSet = false;
       }
@@ -788,8 +794,12 @@ void DAB::ServiceInfo(void) {
       ServiceLabelCharset = SPIbuffer[7];
 
       // Use service ECC if available, otherwise fall back to ensemble ECC
-      uint8_t srvEcc = SPIbuffer[8];
-      ecc = (srvEcc != 0) ? srvEcc : ensembleEcc;
+      // Only set once after service start to prevent corruption during marginal signal
+      if (ecc == 0) {
+        uint8_t srvEcc = SPIbuffer[8];
+        serviceHasOwnEcc = (srvEcc != 0);
+        ecc = serviceHasOwnEcc ? srvEcc : ensembleEcc;
+      }
     }
   }
 }
@@ -820,6 +830,7 @@ void DAB::setFreq(uint8_t freq) {
   pty = 36;
   ecc = 0;
   ensembleEcc = 0;
+  serviceHasOwnEcc = false;
   protectionlevel = 0;
   bitrate = 0;
   dataServiceCheck = 0;
@@ -872,6 +883,8 @@ void DAB::setService(uint8_t _index) {
   SlideShowInit = false;
   ServiceStart = true;
   ServiceIndex = _index;
+  ecc = 0;  // Reset so ServiceInfo() picks up the new service's ECC
+  serviceHasOwnEcc = false;
 
   // Reset segment tracking
   memset(SlideShowSegmentBitmap, 0, sizeof(SlideShowSegmentBitmap));
