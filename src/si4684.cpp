@@ -370,11 +370,7 @@ void DAB::EnsembleInfo(void) {
 
         // Only set EID/EnsembleLabel/ECC once after tuning; they don't change on the same frequency
         // This prevents corrupted data during marginal signal from overwriting valid values
-<<<<<<< HEAD
         if (EID[0] == '\0' || EnsembleLabel[0] == '\0') {
-=======
-        if (EID[0] == '\0') {
->>>>>>> 8b16cbbc6f6e4cc1caf7342c1515cd723fdee97b
           EID[2] = (SPIbuffer[5] & 0xF0) >> 4;
           EID[3] = (SPIbuffer[5] & 0x0F);
           EID[0] = (SPIbuffer[6] & 0xF0) >> 4;
@@ -1263,4 +1259,5 @@ static String convertToUTF8(const wchar_t* input) {
     input++;
   }
   return output;
+
 }
