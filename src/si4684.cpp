@@ -364,7 +364,8 @@ void DAB::EnsembleInfo(void) {
       cts();
       SPIread(26);
 
-      if (SPIbuffer[5] != 0 && SPIbuffer[6] != 0 && SPIbuffer[5] != 0xFF && SPIbuffer[6] != 0xFF) {
+      uint16_t eidRaw = ((uint16_t)SPIbuffer[6] << 8) | SPIbuffer[5];
+      if (eidRaw != 0x0000 && eidRaw != 0xFFFF) {
         EnsembleInfoSet = true;
 
         EID[2] = (SPIbuffer[5] & 0xF0) >> 4;
