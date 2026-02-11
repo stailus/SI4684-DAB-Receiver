@@ -595,8 +595,10 @@ void DAB::assembleSlideshow(void) {
     String segFile = "/seg_" + String(i) + ".bin";
     File srcFile = LittleFS.open(segFile, "rb");
     if (srcFile) {
-      while (srcFile.available()) {
-        destFile.write(srcFile.read());
+      uint8_t buf[512];
+      size_t bytesRead;
+      while ((bytesRead = srcFile.read(buf, sizeof(buf))) > 0) {
+        destFile.write(buf, bytesRead);
       }
       srcFile.close();
       // Remove segment file after copying
@@ -648,8 +650,10 @@ void DAB::assembleSlideshow(void) {
     if (srcFile) {
       File piFile = LittleFS.open("/" + getDynamicFilename(), "wb");
       if (piFile) {
-        while (srcFile.available()) {
-          piFile.write(srcFile.read());
+        uint8_t buf[512];
+        size_t bytesRead;
+        while ((bytesRead = srcFile.read(buf, sizeof(buf))) > 0) {
+          piFile.write(buf, bytesRead);
         }
         piFile.close();
       }
@@ -941,8 +945,10 @@ void DAB::RecoverSlideShow(void) {
       File destinationFile = LittleFS.open("/slideshow.img", "wb");
 
       if (destinationFile) {
-        while (sourceFile.available()) {
-          destinationFile.write(byte(sourceFile.read()));
+        uint8_t buf[512];
+        size_t bytesRead;
+        while ((bytesRead = sourceFile.read(buf, sizeof(buf))) > 0) {
+          destinationFile.write(buf, bytesRead);
         }
         sourceFile.close();
         destinationFile.close();
