@@ -445,7 +445,7 @@ void DAB::getServiceData(void) {
           ServiceData[byte_number] = '\0';
 
           // Read Slideshow header - extract total length
-        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count < 65) {
+        } else if (((SPIbuffer[8] >> 6) & 0x03) == 0x01 && SPIbuffer[27] == 0x80 && SPIbuffer[28] == 0x00 && SPIbuffer[29] == 0x12 && byte_count < 200) {
           uint32_t newLength = (((uint16_t)SPIbuffer[35] << 12) | ((uint16_t)SPIbuffer[36] << 4) | ((uint16_t)SPIbuffer[37] >> 4)) & 0x00FFFF;
 
           if (newLength > 0 && newLength != SlideShowLengthOld) {
@@ -658,6 +658,26 @@ void DAB::assembleSlideshow(void) {
         piFile.close();
       }
       srcFile.close();
+    }
+  }
+
+  // Validate assembled file has a valid image header
+  {
+    File imgFile = LittleFS.open("/slideshow.img", "rb");
+    if (imgFile) {
+      uint8_t hdr[8];
+      imgFile.read(hdr, sizeof(hdr));
+      imgFile.close();
+
+      bool validJPEG = (hdr[0] == 0xFF && hdr[1] == 0xD8 && hdr[2] == 0xFF);
+      bool validPNG  = (hdr[0] == 0x89 && hdr[1] == 0x50 && hdr[2] == 0x4E && hdr[3] == 0x47 &&
+                        hdr[4] == 0x0D && hdr[5] == 0x0A && hdr[6] == 0x1A && hdr[7] == 0x0A);
+
+      if (!validJPEG && !validPNG) {
+        LittleFS.remove("/slideshow.img");
+        SlideShowInit = false;
+        return;
+      }
     }
   }
 

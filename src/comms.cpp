@@ -238,6 +238,7 @@ static void doMOTShow(void) {
 
     if (!file) {
       DataPrint("3\n");
+      radio.SlideShowUpdate2 = false;
       return;
     }
 
@@ -247,6 +248,7 @@ static void doMOTShow(void) {
     if (image == nullptr) {
       DataPrint("3\n");
       file.close();
+      radio.SlideShowUpdate2 = false;
       return;
     }
 
@@ -259,6 +261,7 @@ static void doMOTShow(void) {
     if (buffer == nullptr) {
       DataPrint("3\n");
       free(image);
+      radio.SlideShowUpdate2 = false;
       return;
     }
 
@@ -269,6 +272,7 @@ static void doMOTShow(void) {
       DataPrint("3\n");
       free(image);
       free(buffer);
+      radio.SlideShowUpdate2 = false;
       return;
     }
 
@@ -287,6 +291,7 @@ static void doMOTShow(void) {
       DataPrint("3\n");
       free(image);
       free(buffer);
+      radio.SlideShowUpdate2 = false;
       return;
     }
 
