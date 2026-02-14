@@ -140,12 +140,12 @@ void Communication(void) {
       ServiceDataOld = String(radio.ASCII(radio.ServiceData, radio.ServiceLabelCharset));
     }
 
-    doMOTShow();
-
     if (millis() - signalMillis > interval) {
       DataPrint("$S=SIGNAL=" + String(SignalLevel / 10) + "." + String(SignalLevel % 10) + ",LOCK=" + String(radio.signallock) + ",CNR=" + String(radio.cnr) + ",FIC=" + String(radio.fic) + "\n");
       signalMillis = millis();
     }
+
+    doMOTShow();
   }
 }
 
