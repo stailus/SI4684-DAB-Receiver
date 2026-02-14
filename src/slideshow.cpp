@@ -412,7 +412,6 @@ void ShowSlideShow(void) {
       }
     }
   } else if (isPNG) {
-    tft.fillScreen(TFT_BLACK);
     pngfile = LittleFS.open("/slideshow.img", "rb");
     if (!pngfile) {
       closeFiles();
@@ -435,8 +434,10 @@ void ShowSlideShow(void) {
         return pngfile.seek(position);
       },
       +[](PNGDRAW *pDraw) {
+        static uint32_t pngBkgd;
+        pngBkgd = png.hasAlpha() ? 0x00FFFFFF : 0xFFFFFFFF;
         uint16_t lineBuffer[320];
-        png.getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_LITTLE_ENDIAN, 0x00000000);
+        png.getLineAsRGB565(pDraw, lineBuffer, PNG_RGB565_LITTLE_ENDIAN, pngBkgd);
         tft.pushImage((320 - png.getWidth()) / 2, ((240 - png.getHeight()) / 2) + pDraw->y, pDraw->iWidth, 1, lineBuffer);
         return 1;
       });
@@ -447,6 +448,7 @@ void ShowSlideShow(void) {
       return;
     }
 
+    tft.fillScreen(png.hasAlpha() ? TFT_WHITE : TFT_BLACK);
     tft.startWrite();
     rc = png.decode(nullptr, 0);
     png.close();
