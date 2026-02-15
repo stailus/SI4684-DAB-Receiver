@@ -602,14 +602,14 @@ static const char* const myLanguage[8][82] PROGMEM = {
   },
   
   {
-    "Romana",                     		// Romana
+    "Romana",                     		  // Romana
     "Direcția de rotație inversata",   	// 1
-    "Vă rugăm să eliberați butonul",	// 2
-    "Ecranul a fost inversat",    		// 3
-    "Calibrarea contorului analogic",	// 4
-    "Release button when ready",  		// 5
-    "encoder setat optical",     		// 6
-    "encoder setat standard",    		// 7
+    "Vă rugăm să eliberați butonul",	  // 2
+    "Ecranul a fost inversat",    		  // 3
+    "Calibrarea contorului analogic",	  // 4
+    "Eliberați butonul când este gata",	// 5
+    "encoder setat optical",     		    // 6
+    "encoder setat standard",    		    // 7
     "Receptor SI-DAB",            // 8
     "Software",                   // 9
     "Setari Initiale",            // 10
@@ -687,3 +687,4 @@ static const char* const myLanguage[8][82] PROGMEM = {
   }
 };
 #endif
+
