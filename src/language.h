@@ -5,7 +5,7 @@
 
 // [number of languages][number of texts]
 // *** means the text is the same as in English
-static const char* const myLanguage[7][82] PROGMEM = {
+static const char* const myLanguage[8][82] PROGMEM = {
   {
     "English",                    // English
     "Rotary direction changed",   // 1
@@ -25,7 +25,7 @@ static const char* const myLanguage[7][82] PROGMEM = {
     "Auto slideshow",             // 15
     "Signal unit",                // 16
     "Buffer Slideshows",          // 17
-    "",                           // 18
+    "",		                      // 18
     "PRESS MODE TO RETURN",       // 19
     "CONFIGURATION",              // 20
     "High",                       // 21
@@ -599,6 +599,92 @@ static const char* const myLanguage[7][82] PROGMEM = {
     "Programowanie",                     // 79
     "Projekt graficzny",                 // 80
     "O programie"                        // 81
+  },
+  
+  {
+    "Romana",                     		  // Romana
+    "Direcția de rotație inversata",   	// 1
+    "Vă rugăm să eliberați butonul",	  // 2
+    "Ecranul a fost inversat",    		  // 3
+    "Calibrarea contorului analogic",	  // 4
+    "Eliberați butonul când este gata",	// 5
+    "encoder setat optical",     		    // 6
+    "encoder setat standard",    		    // 7
+    "Receptor SI-DAB",            // 8
+    "Software",                   // 9
+    "Setari Initiale",            // 10
+    "Lista Canale",               // 11
+    "Limba",                      // 12
+    "Luminozitate",               // 13
+    "Tema",                       // 14
+    "Derulare Imagini",           // 15
+    "Masurare Semnal",            // 16
+    "Buffer Slideshows",          // 17
+    "",		                      // 18
+    "APASA MODE PENTRU IESIRE",   // 19
+    "CONFIGURARE",                // 20
+    "Sus",                        // 21
+    "Jos",                        // 22
+    "Pornit",                     // 23
+    "Oprit",                      // 24
+    "Oprire dupa",                // 25
+    "Min.",                       // 26
+    "Informatii Program",         // 27
+    "Frecventa",                  // 28
+    "Nume Multiplex",             // 29
+    "Nume Program",               // 30
+    "Tip Program",                // 31
+    "Nivel Protectie",            // 32
+    "Samplerate",                 // 33
+    "Bitrate",                    // 34
+    "Mod Audio",                  // 35
+    "Informatii Semnal",          // 36
+    "Necunoscut",                 // 37
+    "Stiri",                      // 38
+    "Current Affairs",            // 39
+    "Informatii",                 // 40
+    "Sport",                      // 41
+    "Educatie",                   // 42
+    "Drama",                      // 43
+    "Cultura",                    // 44
+    "Stiinta",                    // 45
+    "Diverse",                    // 46
+    "Pop Music",                  // 47
+    "Rock Music",                 // 48
+    "Easy Listening",             // 49
+    "Light Classical",            // 50
+    "Serious Classical",          // 51
+    "Other Music",                // 52
+    "Vreme",                      // 53
+    "Finante",                    // 54
+    "Copii",                      // 55
+    "Social Affairs",             // 56
+    "Religie",                    // 57
+    "Phone In",                   // 58
+    "Calatorii",                  // 59
+    "Leisure",                    // 60
+    "Jazz Music",                 // 61
+    "Country Music",              // 62
+    "National Music",             // 63
+    "Oldies Music",               // 64
+    "Folk Music",                 // 65
+    "Documentare",                // 66
+    "",                           // 67
+    "",                           // 68
+    "",                           // 69
+    "",                           // 70
+    "",                           // 71
+    "Receptor DAB",               // 72
+    "Asteptare lista",            // 73
+    "Selectare Program",          // 74
+    "Cautare...",                 // 75
+    "Fara Semnal",                // 76
+    "Tuner nedetected!",          // 77
+    "STAND-BY MODE",              // 78
+    "Dezvoltare",                 // 79
+    "Grafica",		              // 80
+    "Despre"                      // 81
   }
 };
 #endif
+
