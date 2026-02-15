@@ -1,4 +1,5 @@
 #include "slideshow.h"
+#include "progressive_jpeg.h"
 
 File pngfile;
 File jpgfile;
@@ -74,10 +75,7 @@ static inline uint16_t readPixelFromFile(File &file, int x, int y) {
 // Bilinear interpolation for upscaling from file
 static void drawBilinearScaledFromFile(int dstWidth, int dstHeight, int offsetX, int offsetY) {
   File readFile = LittleFS.open(PROG_TEMP_FILE, "r");
-  if (!readFile) {
-    Serial.println("Progressive: failed to open temp file for reading");
-    return;
-  }
+  if (!readFile) return;
 
   // Scale factors (fixed point 8.8)
   int scaleX = (progThumbWidth << 8) / dstWidth;
@@ -95,8 +93,6 @@ static void drawBilinearScaledFromFile(int dstWidth, int dstHeight, int offsetX,
     if (srcRow1) free(srcRow1);
 
     // Fallback: read pixel by pixel (slower but works with minimal RAM)
-    Serial.println("Progressive: low memory, using pixel-by-pixel read");
-
     for (int dstY = 0; dstY < dstHeight; dstY++) {
       int srcYFixed = dstY * scaleY;
       int srcY0 = srcYFixed >> 8;
@@ -212,28 +208,6 @@ static void drawBilinearScaledFromFile(int dstWidth, int dstHeight, int offsetX,
 }
 
 
-// Draw full resolution image from temp file to screen (line by line)
-static void drawFromFile(int width, int height, int offsetX, int offsetY) {
-  File readFile = LittleFS.open(PROG_TEMP_FILE, "r");
-  if (!readFile) {
-    Serial.println("Progressive: failed to open temp file for reading");
-    return;
-  }
-
-  uint16_t lineBuffer[320];
-
-  for (int y = 0; y < height; y++) {
-    // Read one line from file
-    size_t bytesToRead = width * sizeof(uint16_t);
-    readFile.read((uint8_t*)lineBuffer, bytesToRead);
-
-    // Push to display
-    tft.pushImage(offsetX, offsetY + y, width, 1, lineBuffer);
-  }
-
-  readFile.close();
-}
-
 // JPEG file callbacks for JPEGDEC library
 static void *jpegOpen(const char *filename, int32_t *size) {
   jpgfile = LittleFS.open(filename, "rb");
@@ -280,7 +254,7 @@ void ShowSlideShow(void) {
 
   File file = LittleFS.open("/slideshow.img", "r");
   byte header[8];
-  size_t bytesRead = file.read(header, sizeof(header));
+  file.read(header, sizeof(header));
   file.close();
   if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A) {
     isJPG = false;
@@ -310,95 +284,67 @@ void ShowSlideShow(void) {
     if (isProgressive) {
       jpeg.close();
 
-      // Progressive JPEG: JPEGDEC only decodes DC coefficients (first scan)
-      // This gives a lower resolution image that we upscale
-      // Try HALF scale first (better quality), fall back to QUARTER if needed
+      // Full-resolution progressive JPEG decode via custom decoder
+      analogWrite(CONTRASTPIN, ContrastSet * 2 + 27);
+      tft.startWrite();
+      bool ok = decodeProgressiveJPEG("/slideshow.img", tft);
+      tft.endWrite();
 
-      size_t freeHeap = ESP.getFreeHeap();
-      int scaleOption;
-      int scaleDivisor;
-      const char* scaleName;
+      if (!ok) {
+        // Fallback: JPEGDEC at reduced scale + bilinear upscale
+        size_t freeHeap = ESP.getFreeHeap();
+        int scaleOption;
+        int scaleDivisor;
 
-      // Calculate buffer sizes for different scales
-      size_t halfSize = (jpegWidth / 2) * (jpegHeight / 2) * sizeof(uint16_t);
-      size_t quarterSize = (jpegWidth / 4) * (jpegHeight / 4) * sizeof(uint16_t);
+        size_t halfSize = (jpegWidth / 2) * (jpegHeight / 2) * sizeof(uint16_t);
+        size_t quarterSize = (jpegWidth / 4) * (jpegHeight / 4) * sizeof(uint16_t);
 
-      // Choose best scale that fits in memory with safety margin
-      if (freeHeap > halfSize + 30000) {
-        scaleOption = JPEG_SCALE_HALF;
-        scaleDivisor = 2;
-        scaleName = "half";
-      } else if (freeHeap > quarterSize + 20000) {
-        scaleOption = JPEG_SCALE_QUARTER;
-        scaleDivisor = 4;
-        scaleName = "quarter";
-      } else {
-        scaleOption = JPEG_SCALE_EIGHTH;
-        scaleDivisor = 8;
-        scaleName = "eighth";
-      }
+        if (freeHeap > halfSize + 30000) {
+          scaleOption = JPEG_SCALE_HALF; scaleDivisor = 2;
+        } else if (freeHeap > quarterSize + 20000) {
+          scaleOption = JPEG_SCALE_QUARTER; scaleDivisor = 4;
+        } else {
+          scaleOption = JPEG_SCALE_EIGHTH; scaleDivisor = 8;
+        }
 
-      progThumbWidth = jpegWidth / scaleDivisor;
-      progThumbHeight = jpegHeight / scaleDivisor;
+        progThumbWidth = jpegWidth / scaleDivisor;
+        progThumbHeight = jpegHeight / scaleDivisor;
 
-      // Create temp file for pixel storage
-      LittleFS.remove(PROG_TEMP_FILE);
-      progFile = LittleFS.open(PROG_TEMP_FILE, "w");
-      if (!progFile) {
-        Serial.println("Progressive: failed to create temp file");
-        restoreContrast();
-        return;
-      }
-
-      // Pre-allocate file size
-      size_t fileSize = progThumbWidth * progThumbHeight * sizeof(uint16_t);
-      uint8_t zeroBuf[256] = {0};
-      size_t written = 0;
-      while (written < fileSize) {
-        size_t toWrite = min((size_t)256, fileSize - written);
-        progFile.write(zeroBuf, toWrite);
-        written += toWrite;
-      }
-      progFile.flush();
-
-      Serial.printf("Progressive: %dx%d -> %dx%d (%s scale, %d bytes, free: %d)\n",
-                    jpegWidth, jpegHeight, progThumbWidth, progThumbHeight,
-                    scaleName, fileSize, freeHeap);
-
-      // Re-open with callback to write to file
-      int rc = jpeg.open("/slideshow.img", jpegOpen, jpegClose, jpegRead, jpegSeek, JPEGDrawProgressiveToFile);
-      if (!rc) {
-        Serial.println("Progressive: reopen failed");
-        progFile.close();
         LittleFS.remove(PROG_TEMP_FILE);
-        restoreContrast();
-        return;
+        progFile = LittleFS.open(PROG_TEMP_FILE, "w");
+        if (progFile) {
+          size_t fileSize = progThumbWidth * progThumbHeight * sizeof(uint16_t);
+          uint8_t zeroBuf[256] = {0};
+          size_t written = 0;
+          while (written < fileSize) {
+            size_t toWrite = min((size_t)256, fileSize - written);
+            progFile.write(zeroBuf, toWrite);
+            written += toWrite;
+          }
+          progFile.flush();
+
+          int rc2 = jpeg.open("/slideshow.img", jpegOpen, jpegClose, jpegRead, jpegSeek, JPEGDrawProgressiveToFile);
+          if (rc2) {
+            jpeg.setPixelType(RGB565_LITTLE_ENDIAN);
+            rc2 = jpeg.decode(0, 0, scaleOption);
+            jpeg.close();
+            progFile.close();
+
+            if (rc2) {
+              int dstWidth = min(jpegWidth, 320);
+              int dstHeight = min(jpegHeight, 240);
+              int offsetX = (320 - dstWidth) / 2;
+              int offsetY = (240 - dstHeight) / 2;
+              tft.startWrite();
+              drawBilinearScaledFromFile(dstWidth, dstHeight, offsetX, offsetY);
+              tft.endWrite();
+            }
+          } else {
+            progFile.close();
+          }
+          LittleFS.remove(PROG_TEMP_FILE);
+        }
       }
-
-      jpeg.setPixelType(RGB565_LITTLE_ENDIAN);
-      rc = jpeg.decode(0, 0, scaleOption);
-      jpeg.close();
-      progFile.close();
-
-      if (rc) {
-        // Calculate destination size and position
-        int dstWidth = min(jpegWidth, 320);
-        int dstHeight = min(jpegHeight, 240);
-        int offsetX = (320 - dstWidth) / 2;
-        int offsetY = (240 - dstHeight) / 2;
-
-        Serial.printf("Progressive: bilinear scaling %dx%d -> %dx%d from file\n",
-                      progThumbWidth, progThumbHeight, dstWidth, dstHeight);
-
-        tft.startWrite();
-        drawBilinearScaledFromFile(dstWidth, dstHeight, offsetX, offsetY);
-        tft.endWrite();
-      } else {
-        Serial.printf("Progressive: decode failed, error=%d\n", jpeg.getLastError());
-      }
-
-      // Clean up temp file
-      LittleFS.remove(PROG_TEMP_FILE);
     } else {
       // Baseline JPEG - direct decode to screen
       tft.startWrite();
