@@ -5,8 +5,8 @@
 #include <FS.h>
 #include <LittleFS.h>
 #include <TFT_eSPI.h>
-#include <JPEGDEC.h>                // https://github.com/bitbank2/JPEGDEC (standard, unmodified)
 #include <PNGdec.h>                 // https://github.com/bitbank2/PNGdec
+#include "JPEGdecoder.h"
 #include "si4684.h"
 #include "constants.h"
 

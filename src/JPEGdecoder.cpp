@@ -1,7 +1,7 @@
-#include "progressive_jpeg.h"
+#include "JPEGdecoder.h"
 
 // ============================================================================
-// Progressive JPEG decoder for ESP32 (no PSRAM)
+// JPEG decoder for ESP32 (no PSRAM)
 //
 // Uses multi-pass row-by-row decoding: for each MCU row, re-reads the file
 // from the start and decodes all scans, storing only the current row's DCT
@@ -12,7 +12,8 @@
 // AC-first scans, so that AC-refine scans read the correct number of bits
 // even when blocks are being discarded (not in the target row).
 //
-// Supports: SOF2 (progressive DCT), YCbCr 4:4:4 / 4:2:2 / 4:2:0 / grayscale
+// Supports: SOF0 (baseline) and SOF2 (progressive DCT)
+// Subsampling: YCbCr 4:4:4 / 4:2:2 / 4:2:0 / grayscale / non-standard
 // Max image size: 320x240 pixels
 // ============================================================================
 
@@ -20,6 +21,7 @@
 #define PJ_MAX_HTABLES    4
 
 // JPEG markers
+#define M_SOF0  0xC0
 #define M_SOF2  0xC2
 #define M_DHT   0xC4
 #define M_RST0  0xD0
@@ -171,7 +173,7 @@ struct PJBitReader {
 
   int getBits(int n) {
     if (bits < n) fillBits();
-    if (hitMarker) return 0;
+    if (bits < n) return 0;
     bits -= n;
     return (buf >> bits) & ((1 << n) - 1);
   }
@@ -180,7 +182,7 @@ struct PJBitReader {
 
   int peekBits(int n) {
     if (bits < n) fillBits();
-    if (hitMarker) return 0;
+    if (bits < n) return 0;
     return (buf >> (bits - n)) & ((1 << n) - 1);
   }
 
@@ -479,6 +481,30 @@ static void pjDecodeACRefine(PJDecoder* d, int16_t* coef, int compScanIdx) {
   }
 }
 
+// --- Baseline block decode (DC + all AC in one call) ---
+static void pjDecodeBaseline(PJDecoder* d, int16_t* coef, int compScanIdx) {
+  PJHuffTable* dcHt = &d->dcHuff[d->scanDcTbl[compScanIdx]];
+  int s = pjHuffDecode(&d->br, dcHt);
+  int diff = (s > 0) ? pjReceive(&d->br, s) : 0;
+  int ci = d->scanCompIdx[compScanIdx];
+  d->comp[ci].dcPred += diff;
+  coef[0] = d->comp[ci].dcPred;
+
+  PJHuffTable* acHt = &d->acHuff[d->scanAcTbl[compScanIdx]];
+  for (int k = 1; k <= 63; k++) {
+    int rs = pjHuffDecode(&d->br, acHt);
+    int r = rs >> 4;
+    s = rs & 0x0F;
+    if (s == 0) {
+      if (r == 15) { k += 15; continue; }
+      break;
+    }
+    k += r;
+    if (k > 63) break;
+    coef[zigzag[k]] = pjReceive(&d->br, s);
+  }
+}
+
 // --- Decode one block ---
 // When store=true, writes to coef (target row buffer).
 // When store=false, uses local dummy; bitmap tracks non-zero positions
@@ -579,7 +605,6 @@ static void pjDecodeScan(PJDecoder* d, int16_t* rowCoefs, int targetMCURow,
         }
       }
       pjHandleRestart(d);
-      if (d->br.hitMarker) return;
     }
   } else {
     // --- Non-interleaved scan (single component) ---
@@ -615,7 +640,6 @@ static void pjDecodeScan(PJDecoder* d, int16_t* rowCoefs, int targetMCURow,
           d->br.reset();
         }
       }
-      if (d->br.hitMarker) return;
     }
   }
 }
@@ -879,25 +903,118 @@ static bool pjProcessFileForRow(File& f, PJDecoder* d, int16_t* rowCoefs,
   return true;
 }
 
+// --- Baseline single-pass decode ---
+static bool pjDecodeBaselinePass(File& f, PJDecoder* d, TFT_eSPI& tft,
+                                  int offsetX, int offsetY) {
+  f.seek(0);
+  if (pjRead8(f) != 0xFF || pjRead8(f) != M_SOI) return false;
+
+  while (true) {
+    int marker = pjSkipToMarker(f);
+    if (marker < 0 || marker == M_EOI) return false;
+    if (marker >= M_RST0 && marker <= M_RST7) continue;
+
+    switch (marker) {
+      case M_SOF0:
+        if (!pjParseSOF(f, d)) return false;
+        break;
+      case M_DHT:
+        if (!pjParseDHT(f, d)) return false;
+        break;
+      case M_DQT:
+        if (!pjParseDQT(f, d)) return false;
+        break;
+      case M_DRI:
+        pjParseDRI(f, d);
+        break;
+      case M_SOS: {
+        if (!pjParseSOS(f, d)) return false;
+        d->br.init(&f);
+
+        int blocksPerRow = d->mcuCntX * d->blocksPerMCU;
+        size_t coefSize = blocksPerRow * 64 * sizeof(int16_t);
+        int16_t* rowCoefs = (int16_t*)malloc(coefSize);
+        size_t pixelBufSize = blocksPerRow * 64;
+        uint8_t* allBlocks = (uint8_t*)malloc(pixelBufSize);
+
+        if (!rowCoefs || !allBlocks) {
+          if (rowCoefs) free(rowCoefs);
+          if (allBlocks) free(allBlocks);
+          return false;
+        }
+
+        d->mcuCount = 0;
+        for (int i = 0; i < d->nComp; i++) d->comp[i].dcPred = 0;
+
+        for (int row = 0; row < d->mcuCntY; row++) {
+          memset(rowCoefs, 0, coefSize);
+
+          for (int mcuX = 0; mcuX < d->mcuCntX; mcuX++) {
+            for (int si = 0; si < d->scanNComp; si++) {
+              int ci = d->scanCompIdx[si];
+              for (int bv = 0; bv < d->comp[ci].vSamp; bv++) {
+                for (int bh = 0; bh < d->comp[ci].hSamp; bh++) {
+                  int idx = pjRowBlockIndex(d, mcuX, ci, bh, bv);
+                  pjDecodeBaseline(d, &rowCoefs[idx * 64], si);
+                }
+              }
+            }
+            if (d->restartInterval > 0) {
+              d->mcuCount++;
+              if (d->mcuCount >= d->restartInterval) {
+                d->mcuCount = 0;
+                for (int i = 0; i < d->nComp; i++) d->comp[i].dcPred = 0;
+                d->br.reset();
+              }
+            }
+            if (d->br.hitMarker) break;
+          }
+
+          pjOutputMCURow(d, rowCoefs, row, tft, offsetX, offsetY, allBlocks);
+          if (d->br.hitMarker) break;
+        }
+
+        free(allBlocks);
+        free(rowCoefs);
+        return true;
+      }
+      default:
+        if ((marker >= M_APP0 && marker <= M_APP15) || marker == M_COM) {
+          int len = pjRead16(f); pjSkip(f, len - 2);
+        } else {
+          int len = pjRead16(f);
+          if (len >= 2) pjSkip(f, len - 2);
+        }
+        break;
+    }
+  }
+  return false;
+}
+
 // --- Main entry point ---
-bool decodeProgressiveJPEG(const char* filename, TFT_eSPI& tft,
-                           int displayWidth, int displayHeight) {
+bool JPEGdecoder(const char* filename, TFT_eSPI& tft,
+                 int displayWidth, int displayHeight) {
   File f = LittleFS.open(filename, "rb");
   if (!f) return false;
 
   PJDecoder* d = (PJDecoder*)calloc(1, sizeof(PJDecoder));
   if (!d) { f.close(); return false; }
 
-  // Pre-scan to get dimensions
+  // Pre-scan to get dimensions and type
   f.seek(0);
   bool foundSOF = false;
+  bool isBaseline = false;
   while (!foundSOF) {
     int marker = pjSkipToMarker(f);
     if (marker < 0 || marker == M_EOI) break;
-    if (marker == M_SOF2) {
+    if (marker == M_SOF0) {
+      pjParseSOF(f, d);
+      isBaseline = true;
+      foundSOF = true;
+    } else if (marker == M_SOF2) {
       pjParseSOF(f, d);
       foundSOF = true;
-    } else if (marker != M_SOI && marker != M_RST0) {
+    } else if (marker != M_SOI && !(marker >= M_RST0 && marker <= M_RST7)) {
       int len = pjRead16(f);
       if (len >= 2) pjSkip(f, len - 2);
     }
@@ -907,42 +1024,44 @@ bool decodeProgressiveJPEG(const char* filename, TFT_eSPI& tft,
     free(d); f.close(); return false;
   }
 
-  // Allocate coefficient buffer for one MCU row
-  int blocksPerRow = d->mcuCntX * d->blocksPerMCU;
-  size_t coefSize = blocksPerRow * 64 * sizeof(int16_t);
-  int16_t* rowCoefs = (int16_t*)malloc(coefSize);
-
-  // Allocate decoded pixel buffer for one MCU row
-  size_t pixelBufSize = blocksPerRow * 64;
-  uint8_t* allBlocks = (uint8_t*)malloc(pixelBufSize);
-
-  // Allocate non-zero bitmap (8 bytes per block for 64 coefficient flags)
-  size_t bitmapSize = d->totalImageBlocks * 8;
-  uint8_t* nzBitmap = (uint8_t*)calloc(1, bitmapSize);
-
-  if (!rowCoefs || !allBlocks || !nzBitmap) {
-    if (rowCoefs) free(rowCoefs);
-    if (allBlocks) free(allBlocks);
-    if (nzBitmap) free(nzBitmap);
-    free(d); f.close();
-    return false;
-  }
-
   int offsetX = (displayWidth - d->width) / 2;
   int offsetY = (displayHeight - d->height) / 2;
 
-  for (int row = 0; row < d->mcuCntY; row++) {
-    memset(rowCoefs, 0, coefSize);
-    memset(nzBitmap, 0, bitmapSize);
-    pjProcessFileForRow(f, d, rowCoefs, row, nzBitmap);
+  bool result;
+  if (isBaseline) {
+    result = pjDecodeBaselinePass(f, d, tft, offsetX, offsetY);
+  } else {
+    // Progressive: multi-pass row-by-row decode
+    int blocksPerRow = d->mcuCntX * d->blocksPerMCU;
+    size_t coefSize = blocksPerRow * 64 * sizeof(int16_t);
+    int16_t* rowCoefs = (int16_t*)malloc(coefSize);
+    size_t pixelBufSize = blocksPerRow * 64;
+    uint8_t* allBlocks = (uint8_t*)malloc(pixelBufSize);
+    size_t bitmapSize = d->totalImageBlocks * 8;
+    uint8_t* nzBitmap = (uint8_t*)calloc(1, bitmapSize);
 
-    pjOutputMCURow(d, rowCoefs, row, tft, offsetX, offsetY, allBlocks);
+    if (!rowCoefs || !allBlocks || !nzBitmap) {
+      if (rowCoefs) free(rowCoefs);
+      if (allBlocks) free(allBlocks);
+      if (nzBitmap) free(nzBitmap);
+      free(d); f.close();
+      return false;
+    }
+
+    for (int row = 0; row < d->mcuCntY; row++) {
+      memset(rowCoefs, 0, coefSize);
+      memset(nzBitmap, 0, bitmapSize);
+      pjProcessFileForRow(f, d, rowCoefs, row, nzBitmap);
+      pjOutputMCURow(d, rowCoefs, row, tft, offsetX, offsetY, allBlocks);
+    }
+
+    free(nzBitmap);
+    free(allBlocks);
+    free(rowCoefs);
+    result = true;
   }
 
-  free(nzBitmap);
-  free(allBlocks);
-  free(rowCoefs);
   free(d);
   f.close();
-  return true;
+  return result;
 }
