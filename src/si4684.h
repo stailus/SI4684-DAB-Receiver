@@ -80,6 +80,7 @@ class DAB {
     bool ServiceStart;
     bool signallock;
     bool SlideShowAvailable;
+    bool SlideShowDebug;
     bool SlideShowUpdate;
     bool SlideShowUpdate2;
     char EID[5];

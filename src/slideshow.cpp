@@ -3,39 +3,77 @@
 File pngfile;
 PNG png;
 
-void ShowSlideShow(void) {
+static bool isProgressiveJPEG(void) {
+  File f = LittleFS.open("/slideshow.img", "rb");
+  if (!f) return false;
+  f.seek(2);  // skip SOI
+  while (f.available() >= 4) {
+    uint8_t b = f.read();
+    if (b != 0xFF) break;
+    while (b == 0xFF && f.available()) b = f.read();
+    if (b == 0xC0) { f.close(); return false; }  // SOF0 = baseline
+    if (b == 0xC2) { f.close(); return true; }   // SOF2 = progressive
+    if (b == 0xD9) break;  // EOI
+    if (f.available() >= 2) {
+      uint8_t lh = f.read();
+      uint8_t ll = f.read();
+      uint16_t len = (lh << 8) | ll;
+      if (len < 2) break;
+      f.seek(f.position() + len - 2);
+    }
+  }
+  f.close();
+  return false;
+}
+
+static void fadeDown(void) {
   for (int x = ContrastSet; x > 0; x--) {
     analogWrite(CONTRASTPIN, x * 2);
     delay(5);
   }
+  analogWrite(CONTRASTPIN, 0);
+}
 
+static void fadeUp(void) {
+  for (int x = 0; x <= ContrastSet; x++) {
+    analogWrite(CONTRASTPIN, x * 2 + 27);
+    delay(5);
+  }
+}
+
+void ShowSlideShow(void) {
   File file = LittleFS.open("/slideshow.img", "r");
+  if (!file) return;
   byte header[8];
   file.read(header, sizeof(header));
   file.close();
 
-  bool isJPG = false;
-  bool isPNG = false;
+  bool isJPG = (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF);
+  bool isPNG = (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 &&
+                header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A);
 
-  if (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A) {
-    isPNG = true;
-  } else if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) {
-    isJPG = true;
-  }
-
-  if (isJPG) {
+  if (isJPG && isProgressiveJPEG()) {
+    // Progressive JPEG: fade down, clear, fade up, then decode visibly
+    fadeDown();
     tft.fillScreen(TFT_BLACK);
-    analogWrite(CONTRASTPIN, ContrastSet * 2 + 27);
+    fadeUp();
     tft.startWrite();
     JPEGdecoder("/slideshow.img", tft);
     tft.endWrite();
+  } else if (isJPG) {
+    // Baseline JPEG: fade down, decode hidden, fade up
+    fadeDown();
+    tft.fillScreen(TFT_BLACK);
+    tft.startWrite();
+    JPEGdecoder("/slideshow.img", tft);
+    tft.endWrite();
+    fadeUp();
   } else if (isPNG) {
+    // PNG: fade down, decode hidden, fade up
+    fadeDown();
     pngfile = LittleFS.open("/slideshow.img", "rb");
     if (!pngfile) {
-      for (int x = 0; x <= ContrastSet; x++) {
-        analogWrite(CONTRASTPIN, x * 2 + 27);
-        delay(5);
-      }
+      fadeUp();
       return;
     }
     int16_t rc = png.open("/slideshow.img",
@@ -64,10 +102,7 @@ void ShowSlideShow(void) {
 
     if (rc != PNG_SUCCESS) {
       pngfile.close();
-      for (int x = 0; x <= ContrastSet; x++) {
-        analogWrite(CONTRASTPIN, x * 2 + 27);
-        delay(5);
-      }
+      fadeUp();
       return;
     }
 
@@ -77,10 +112,6 @@ void ShowSlideShow(void) {
     png.close();
     tft.endWrite();
     pngfile.close();
-  }
-
-  for (int x = 0; x <= ContrastSet; x++) {
-    analogWrite(CONTRASTPIN, x * 2 + 27);
-    delay(5);
+    fadeUp();
   }
 }

@@ -15,7 +15,14 @@ void Communication(void) {
     unsigned int equalsIndex = input.indexOf('=');
 
     if (equalsIndex == -1) {
-      DataPrint("#2\n");
+      input.trim();
+      input.toUpperCase();
+      if (input.equals("DEBUG")) {
+        radio.SlideShowDebug = !radio.SlideShowDebug;
+        Serial.printf("[SLS] Debug %s\n", radio.SlideShowDebug ? "ON" : "OFF");
+      } else {
+        DataPrint("#2\n");
+      }
       return;
     }
 
