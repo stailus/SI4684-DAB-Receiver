@@ -1,4 +1,5 @@
 #include "si4684.h"
+#include "mbedtls/base64.h"
 
 unsigned char SPIbuffer[4096];
 uint8_t EPGbuffer[12000];
@@ -709,6 +710,28 @@ void DAB::assembleSlideshow(void) {
   // Validation passed — replace old slideshow with new one
   if (LittleFS.exists("/slideshow.img")) LittleFS.remove("/slideshow.img");
   LittleFS.rename("/temp.img", "/slideshow.img");
+
+  // Print BASE64 encoded slideshow when debug is enabled
+  if (SlideShowDebug) {
+    File b64File = LittleFS.open("/slideshow.img", "rb");
+    if (b64File) {
+      size_t fileSize = b64File.size();
+      Serial.printf("[SLS] BASE64 (%u bytes):\n", fileSize);
+      uint8_t raw[576];
+      uint8_t enc[769];
+      size_t olen;
+      while (b64File.available()) {
+        size_t bytesRead = b64File.read(raw, sizeof(raw));
+        if (mbedtls_base64_encode(enc, sizeof(enc), &olen, raw, bytesRead) == 0) {
+          enc[olen] = '\0';
+          Serial.print((char*)enc);
+        }
+      }
+      Serial.println();
+      Serial.println("[SLS] END BASE64");
+      b64File.close();
+    }
+  }
 
   // Clean up segment files
   for (uint8_t i = 0; i < SlideShowTotalSegments; i++) {
