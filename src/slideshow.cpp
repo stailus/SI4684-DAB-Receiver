@@ -42,8 +42,10 @@ static void fadeUp(void) {
 }
 
 void ShowSlideShow(void) {
+  if (radio.SlideShowDebug) Serial.println("[SLS] ShowSlideShow() called");
   File file = LittleFS.open("/slideshow.img", "r");
-  if (!file) return;
+  if (!file) { if (radio.SlideShowDebug) Serial.println("[SLS] Failed to open slideshow.img"); return; }
+  size_t fileSize = file.size();
   byte header[8];
   file.read(header, sizeof(header));
   file.close();
@@ -52,21 +54,26 @@ void ShowSlideShow(void) {
   bool isPNG = (header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47 &&
                 header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A);
 
+  if (radio.SlideShowDebug) Serial.printf("[SLS] Display: size=%u, isJPG=%d, isPNG=%d, hdr=%02X%02X%02X%02X\n",
+    fileSize, isJPG, isPNG, header[0], header[1], header[2], header[3]);
+
   if (isJPG && isProgressiveJPEG()) {
-    // Progressive JPEG: fade down, clear, fade up, then decode visibly
+    if (radio.SlideShowDebug) Serial.println("[SLS] Decoding as progressive JPEG");
     fadeDown();
     tft.fillScreen(TFT_BLACK);
     fadeUp();
     tft.startWrite();
-    JPEGdecoder("/slideshow.img", tft);
+    bool ok = JPEGdecoder("/slideshow.img", tft);
     tft.endWrite();
+    if (radio.SlideShowDebug) Serial.printf("[SLS] Progressive decode result: %s\n", ok ? "OK" : "FAIL");
   } else if (isJPG) {
-    // Baseline JPEG: fade down, decode hidden, fade up
+    if (radio.SlideShowDebug) Serial.println("[SLS] Decoding as baseline JPEG");
     fadeDown();
     tft.fillScreen(TFT_BLACK);
     tft.startWrite();
-    JPEGdecoder("/slideshow.img", tft);
+    bool ok = JPEGdecoder("/slideshow.img", tft);
     tft.endWrite();
+    if (radio.SlideShowDebug) Serial.printf("[SLS] Baseline decode result: %s\n", ok ? "OK" : "FAIL");
     fadeUp();
   } else if (isPNG) {
     // PNG: fade down, decode hidden, fade up
